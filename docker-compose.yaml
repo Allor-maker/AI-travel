@@ -7,13 +7,23 @@ services:
     restart: always
     container_name: route_db
     environment:
-      # Эти переменные нужны для инициализации самой БД PostgreSQL
-      POSTGRES_USER: user 
+      POSTGRES_USER: user
       POSTGRES_PASSWORD: password
       POSTGRES_DB: routing_db
     volumes:
+      # Том для хранения данных БД между перезапусками
       - postgres_data:/var/lib/postgresql/data
-    # ... (порты, healthcheck)
+      # Копируем SQL-скрипт инициализации в специальную директорию
+      - ./app/init_bd.sql:/docker-entrypoint-initdb.d/init.sql
+      # Копируем данные CSV, чтобы SQL-скрипт мог их найти
+      - ./data:/data
+    ports:
+      - "5432:5432" # Для отладки: доступ к БД с хост-машины
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d routing_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   # 2. СЕРВИС ПРИЛОЖЕНИЯ (Python Bot)
   app:
@@ -21,24 +31,21 @@ services:
     container_name: route_planner_app
     restart: on-failure
     depends_on:
-      - db 
-      
-    # <--- ВАЖНО: ЗАГРУЗКА ВНЕШНИХ СЕКРЕТОВ ИЗ ФАЙЛА .ENV
+      db:
+        condition: service_healthy # Запускать app ТОЛЬКО после того, как БД будет готова
+        
     env_file:
       - .env
       
     environment:
-      # <--- ВНУТРЕННИЕ ПЕРЕМЕННЫЕ ДЛЯ ПОДКЛЮЧЕНИЯ К БД
-      # App обращается к хосту, который назван 'db' (имя сервиса)
+      # Переменные для подключения к БД внутри Docker сети
       DB_HOST: db 
-      DB_NAME: routing_db # Должно совпадать с POSTGRES_DB
-      DB_USER: user       # Должно совпадать с POSTGRES_USER
-      DB_PASSWORD: password # Должно совпадать с POSTGRES_PASSWORD
+      DB_NAME: routing_db
+      DB_USER: user
+      DB_PASSWORD: password
       
-      # TG_BOT_TOKEN, LLM_API_KEY и LLM_FOLDER_ID 
-      # автоматически подтягиваются из .env благодаря env_file: - .env
-      
-    entrypoint: /bin/sh -c "python db_init.py && python main.py"
+    # Просто запускаем бота. Инициализация уже произошла в контейнере db.
+    command: ["python", "main.py"]
 
 volumes:
   postgres_data:

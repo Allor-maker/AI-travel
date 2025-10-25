@@ -15,6 +15,7 @@ from typing import List, Dict, Any, Tuple, Optional
 import urllib.parse
 
 #бот
+from telegram import KeyboardButton, ReplyKeyboardMarkup
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
 
@@ -31,6 +32,7 @@ VISIT_TIME_MINUTES = 15  # Время на посещение каждого о�
 
 # --- ЗАГРУЗКА ПЕРЕМЕННЫХ ОКРУЖЕНИЯ ---
 TOKEN = os.environ.get("TG_BOT_TOKEN", "") #
+API_KEY = os.environ.get("LLM_API_KEY", "")
 FOLDER_ID = os.environ.get("LLM_FOLDER_ID", "") #
 YANDEX_CLOUD_MODEL = "yandexgpt-lite"
 
