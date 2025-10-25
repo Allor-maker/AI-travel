@@ -19,7 +19,6 @@ from telegram import KeyboardButton, ReplyKeyboardMarkup
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
 
-# --- ОБЩЕЕ ЛОГИРОВАНИЕ (ОСТАВЛЯЕМ ТОЛЬКО ЭТО) ---
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -492,13 +491,7 @@ def generate_yandex_route_url(coordinates, transport_type):
     return final_url
 
 
-
-# app/main.py (После всех функций маршрутизации, таких как generate_yandex_route_url)
-
-# ----- ТЕЛЕГРАМ ОБРАБОТЧИКИ -----
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # ... (Весь код функции start из примера) ...
     keyboard = [
         [
             KeyboardButton(
@@ -551,7 +544,6 @@ async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     logger.info(f"Получены координаты от {user_id}: LAT={latitude}, LON={longitude}")
     await update.message.reply_text("Получил координаты. Запускаю анализ запроса и построение маршрута, это может занять минуту...")
 
-    # --- ИНТЕГРАЦИЯ ВАШЕЙ ЛОГИКИ МАРШРУТИЗАЦИИ ---
 
     # 1. Извлекаем текстовый запрос
     # Если нет кэшированного запроса, используем дефолт
@@ -566,21 +558,19 @@ async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     try:
-        # 2. LLM: Парсим запрос
-        # ВАЖНО: Раскомментируйте, когда будете использовать реальный Yandex LLM
-        # response = encode_query(yandex_client, query)
-        # llm_output_json = response.output[0].content[0].text
+        response = encode_query(yandex_client, query)
+        llm_output_json = response.output[0].content[0].text
         
         # Заглушка для тестирования без LLM
-        llm_output_json = """
-        {
-            "start_location": null,
-            "distance_km": null,
-            "duration_minutes": 150,
-            "travel_mode": "пеший",
-            "interests": "историческая достопримечательность"
-        }
-        """
+        # llm_output_json = """
+        # {
+        #     "start_location": null,
+        #     "distance_km": null,
+        #     "duration_minutes": 150,
+        #     "travel_mode": "пеший",
+        #     "interests": "историческая достопримечательность"
+        # }
+        # """
 
         llm_params = json.loads(llm_output_json)
 
@@ -598,9 +588,7 @@ async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
         # 5. Форматируем и отправляем ответ
         if final_route.get("success"):
-            # ... (Ваша логика сбора координат, генерации Yandex URL и форматирования текста) ...
-            
-            # Собираем полный список координат: Старт -> Точки -> Старт
+
             all_points_coords = [start_point]
             poi_coords = [(poi['lat'], poi['lon']) for poi in final_route['pois']]
             all_points_coords.extend(poi_coords)
