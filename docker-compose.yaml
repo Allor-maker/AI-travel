@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  # 1. СЕРВИС POSTGIS (База данных)
+  db:
+    image: postgis/postgis:15-3.3
+    restart: always
+    container_name: route_db
+    environment:
+      # Эти переменные нужны для инициализации самой БД PostgreSQL
+      POSTGRES_USER: user 
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: routing_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # ... (порты, healthcheck)
+
+  # 2. СЕРВИС ПРИЛОЖЕНИЯ (Python Bot)
+  app:
+    build: .
+    container_name: route_planner_app
+    restart: on-failure
+    depends_on:
+      - db 
+      
+    # <--- ВАЖНО: ЗАГРУЗКА ВНЕШНИХ СЕКРЕТОВ ИЗ ФАЙЛА .ENV
+    env_file:
+      - .env
+      
+    environment:
+      # <--- ВНУТРЕННИЕ ПЕРЕМЕННЫЕ ДЛЯ ПОДКЛЮЧЕНИЯ К БД
+      # App обращается к хосту, который назван 'db' (имя сервиса)
+      DB_HOST: db 
+      DB_NAME: routing_db # Должно совпадать с POSTGRES_DB
+      DB_USER: user       # Должно совпадать с POSTGRES_USER
+      DB_PASSWORD: password # Должно совпадать с POSTGRES_PASSWORD
+      
+      # TG_BOT_TOKEN, LLM_API_KEY и LLM_FOLDER_ID 
+      # автоматически подтягиваются из .env благодаря env_file: - .env
+      
+    entrypoint: /bin/sh -c "python db_init.py && python main.py"
+
+volumes:
+  postgres_data:
