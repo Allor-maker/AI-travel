@@ -19,6 +19,7 @@ from telegram import KeyboardButton, ReplyKeyboardMarkup
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
 
+# --- ОБЩЕЕ ЛОГИРОВАНИЕ (ОСТАВЛЯЕМ ТОЛЬКО ЭТО) ---
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -237,7 +238,22 @@ def prepare_query_params(llm_output_json, start_lat, start_lon):
     """
     Обрабатывает JSON от LLM и координаты старта для подготовки SQL-параметров.
     """
-    data = json.loads(llm_output_json)
+    """
+    Обрабатывает JSON от LLM и координаты старта для подготовки SQL-параметров.
+    """
+    # Очистка от возможного Markdown форматирования (на всякий случай)
+    def clean_json_text(text):
+        if text.startswith('```') and text.endswith('```'):
+            lines = text.split('\n')
+            cleaned_lines = lines[1:-1]
+            return '\n'.join(cleaned_lines)
+        elif text.startswith('```'):
+            return text.replace('```', '', 1)
+        else:
+            return text.strip()
+    
+    cleaned_json = clean_json_text(llm_output_json)
+    data = json.loads(cleaned_json)
 
     # 1. Определение максимального радиуса поиска (в метрах)
 
@@ -491,7 +507,13 @@ def generate_yandex_route_url(coordinates, transport_type):
     return final_url
 
 
+
+# app/main.py (После всех функций маршрутизации, таких как generate_yandex_route_url)
+
+# ----- ТЕЛЕГРАМ ОБРАБОТЧИКИ -----
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # ... (Весь код функции start из примера) ...
     keyboard = [
         [
             KeyboardButton(
@@ -544,9 +566,9 @@ async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     logger.info(f"Получены координаты от {user_id}: LAT={latitude}, LON={longitude}")
     await update.message.reply_text("Получил координаты. Запускаю анализ запроса и построение маршрута, это может занять минуту...")
 
+    # --- ИНТЕГРАЦИЯ ВАШЕЙ ЛОГИКИ МАРШРУТИЗАЦИИ ---
 
     # 1. Извлекаем текстовый запрос
-    # Если нет кэшированного запроса, используем дефолт
     query = USER_QUERY_CACHE.pop(user_id, "Хочу пешком 90 минут по историческим местам")
     
     try:
@@ -558,25 +580,33 @@ async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     try:
+        # 2. LLM: Парсим запрос
         response = encode_query(yandex_client, query)
-        llm_output_json = response.output[0].content[0].text
+        llm_output_text = response.output[0].content[0].text
+        logger.info(f"ПОЛНЫЙ ОТВЕТ ОТ LLM: {llm_output_text}")
         
-        # Заглушка для тестирования без LLM
-        # llm_output_json = """
-        # {
-        #     "start_location": null,
-        #     "distance_km": null,
-        #     "duration_minutes": 150,
-        #     "travel_mode": "пеший",
-        #     "interests": "историческая достопримечательность"
-        # }
-        # """
-
-        llm_params = json.loads(llm_output_json)
+        # ОЧИСТКА ВЫВОДА ОТ MARKDOWN ФОРМАТИРОВАНИЯ
+        def clean_llm_output(text):
+            # Удаляем блоки с бэктиками
+            if text.startswith('```') and text.endswith('```'):
+                # Удаляем первые и последние бэктики
+                lines = text.split('\n')
+                # Пропускаем первую строку (```) и последнюю (```)
+                cleaned_lines = lines[1:-1]
+                return '\n'.join(cleaned_lines)
+            elif text.startswith('```'):
+                # Если формат неполный, удаляем только начальные бэктики
+                return text.replace('```', '', 1)
+            else:
+                return text.strip()
+        
+        cleaned_llm_output = clean_llm_output(llm_output_text)
+        logger.info(f"ОЧИЩЕННЫЙ ОТВЕТ ОТ LLM: {cleaned_llm_output}")
+        
+        llm_params = json.loads(cleaned_llm_output)
 
         # 3. DB: Ищем подходящие объекты
-        # Используем полученные от пользователя координаты (latitude, longitude)
-        candidate_objects = find_suitable_objects(llm_output_json, latitude, longitude)
+        candidate_objects = find_suitable_objects(cleaned_llm_output, latitude, longitude)
         
         if not candidate_objects:
              await update.message.reply_text("Не удалось найти подходящие объекты в заданном радиусе и по интересам. Попробуйте другой запрос.")
@@ -588,7 +618,7 @@ async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
         # 5. Форматируем и отправляем ответ
         if final_route.get("success"):
-
+            # Собираем полный список координат: Старт -> Точки -> Старт
             all_points_coords = [start_point]
             poi_coords = [(poi['lat'], poi['lon']) for poi in final_route['pois']]
             all_points_coords.extend(poi_coords)
@@ -607,7 +637,7 @@ async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             )
             
             poi_list = "\n".join([
-                f"{i+1}. [{poi['name']}]({route_url})" # Ссылка может вести на общий маршрут
+                f"{i+1}. [{poi['name']}]({route_url})"
                 for i, poi in enumerate(final_route['pois'])
             ])
             
@@ -620,6 +650,10 @@ async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         else:
             await update.message.reply_text(f"Не удалось построить оптимальный маршрут: {final_route.get('message', 'Неизвестная ошибка')}")
 
+    except json.JSONDecodeError as e:
+        logger.error(f"Ошибка парсинга JSON от LLM: {e}")
+        logger.error(f"Сырой вывод LLM: {llm_output_text}")
+        await update.message.reply_text("Ошибка при анализе вашего запроса. Попробуйте сформулировать его более четко.")
     except Exception as e:
         logger.error(f"Критическая ошибка при обработке маршрута: {e}", exc_info=True)
         await update.message.reply_text("К сожалению, произошла непредвиденная ошибка при расчете маршрута.")
