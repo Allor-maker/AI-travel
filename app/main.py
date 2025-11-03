@@ -60,7 +60,7 @@ CATEGORY_MAPPING = {
     "парки и природа": [1],
     "искусство": [3],
     "религия": [4],
-    "город": [5],
+    "город": [1,2,3,4,5,6],
     "памятники": [6]
 }
 
@@ -409,6 +409,7 @@ def _greedy_route_with_matrix(start: Tuple[float, float], pois: List[Dict[str, A
     [НОВЫЙ ОПТИМИЗИРОВАННЫЙ АЛГОРИТМ]
     Использует полную матрицу времени OSRM, чтобы свести все расчеты времени к ОДНОМУ внешнему запросу.
     """
+    coefficient = SPEED_MAPPINGS["автомобиль"] / SPEED_MAPPINGS[mode]
 
     if not pois:
         return [], 0.0
@@ -442,7 +443,7 @@ def _greedy_route_with_matrix(start: Tuple[float, float], pois: List[Dict[str, A
         # Перебираем все оставшиеся POI
         for next_index in remaining_indices:
             # Получаем время из матрицы: travel_time_matrix[от_кого][до_кого]
-            travel_duration = travel_time_matrix[current_index][next_index]
+            travel_duration = travel_time_matrix[current_index][next_index] * coefficient
 
             if travel_duration is not None and travel_duration < min_travel_duration:
                 min_travel_duration = travel_duration
@@ -551,7 +552,7 @@ async def handle_text_query(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
 
     await update.message.reply_text(
-        f"Понял: '{query}'. Теперь мне нужны твои координаты. Пожалуйста, отправь геолокацию.",
+        f"Понял, сейчас помогу подобрать маршрут! Теперь мне нужны твои координаты. Пожалуйста, отправь геолокацию.",
         reply_markup=reply_markup
     )
 
