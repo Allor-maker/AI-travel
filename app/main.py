@@ -56,11 +56,12 @@ SPEED_MAPPINGS = {
 
 # Маппинг категорий <- надо будет нам самим определить какие id чему соотвествуют
 CATEGORY_MAPPING = {
-    "историческая достопримечательность": [1, 4, 5],
-    "парк": [2],
-    "искусство": [3, 6, 7, 8, 10],
-    "религия": [],
-    "город": [9]
+    "историческая достопримечательность": [2],
+    "парки и природа": [1],
+    "искусство": [3],
+    "религия": [4],
+    "город": [1,2,3,4,5,6],
+    "памятники": [6]
 }
 
 YANDEX_TRANSPORT_MAPPING = {
@@ -187,7 +188,7 @@ def create_prompt(query):
         3. Если какое-то поле не упоминается в запросе, используй для него значение `null`.
         4. Для `travel_mode` и `interests` выбери наиболее подходящее значение из списков:
         - travel_mode: "пеший", "автомобиль", "велосипед", "электросамокат"
-        - interests: "парк", "историческая достопримечательность", "искусство", "религия","город"
+        - interests: "парки и природа", "историческая достопримечательность", "искусство", "религия", "город", "памятники"
         5. Время всегда переводи в минуты. Например, "полтора часа" -> 90.
 
         ## ПРИМЕРЫ
@@ -292,7 +293,7 @@ def prepare_query_params(llm_output_json, start_lat, start_lon):
 
     # Если интересы не определены, ищем все, чтобы дать LLM выбор
     if not target_ids:
-        target_ids = [1, 2, 3, 4, 5, 10]
+        target_ids = [1, 2, 3, 4, 5, 6]
 
     # В PostGIS координаты передаются как (Lon, Lat) т.е. нужно менять координаты местами
     return start_lon, start_lat, list(target_ids), max_distance_m
@@ -408,6 +409,7 @@ def _greedy_route_with_matrix(start: Tuple[float, float], pois: List[Dict[str, A
     [НОВЫЙ ОПТИМИЗИРОВАННЫЙ АЛГОРИТМ]
     Использует полную матрицу времени OSRM, чтобы свести все расчеты времени к ОДНОМУ внешнему запросу.
     """
+    coefficient = SPEED_MAPPINGS["автомобиль"] / SPEED_MAPPINGS[mode]
 
     if not pois:
         return [], 0.0
@@ -441,7 +443,7 @@ def _greedy_route_with_matrix(start: Tuple[float, float], pois: List[Dict[str, A
         # Перебираем все оставшиеся POI
         for next_index in remaining_indices:
             # Получаем время из матрицы: travel_time_matrix[от_кого][до_кого]
-            travel_duration = travel_time_matrix[current_index][next_index]
+            travel_duration = travel_time_matrix[current_index][next_index] * coefficient
 
             if travel_duration is not None and travel_duration < min_travel_duration:
                 min_travel_duration = travel_duration
@@ -550,7 +552,7 @@ async def handle_text_query(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
 
     await update.message.reply_text(
-        f"Понял: '{query}'. Теперь мне нужны твои координаты. Пожалуйста, отправь геолокацию.",
+        f"Понял, сейчас помогу подобрать маршрут! Теперь мне нужны твои координаты. Пожалуйста, отправь геолокацию.",
         reply_markup=reply_markup
     )
 
