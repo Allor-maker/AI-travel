@@ -1,0 +1,3 @@
+#environment файлы
+.env
+!.env.example.txt
